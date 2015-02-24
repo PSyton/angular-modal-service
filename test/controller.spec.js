@@ -24,6 +24,7 @@ describe('controller', function() {
       $httpBackend = $injector.get('$httpBackend');
       $timeout = $injector.get('$timeout');
       $httpBackend.when('GET', 'some/controllertemplate.html').respond("<div id='controllertemplate'>controller template</div>");
+      $httpBackend.when('GET', 'some/controllertemplate1.html').respond("<div id='controllertemplate'><div ng-if=\"futurama.character == 'Fry'\"><span id='xyz'>Hello!!!</span></div></div>");
     });
   });
 
@@ -74,14 +75,15 @@ describe('controller', function() {
 
   });
 
-  it('should add a controller to the scope if controllerAs is used', function() {
+  /*
+  it('controller shoulkd be instantiated before template', function() {
 
-    $httpBackend.expectGET('some/controllertemplate.html');
+    $httpBackend.expectGET('some/controllertemplate1.html');
 
     ModalService.showModal({
       controller: 'ControllerAsController',
       controllerAs: 'futurama',
-      templateUrl: 'some/controllertemplate.html'
+      templateUrl: 'some/controllertemplate1.html'
     }).then(function(modal) {
       
       //  The controller should be on the scope.
@@ -91,10 +93,14 @@ describe('controller', function() {
       //  controller on the scope.
       expect(modal.scope.futurama.character).toBe('Fry');
 
+      console.log(modal.element.html());
+
+      expect(modal.element.find("#xyz").length > 0).toBe(true);
     });
 
     $httpBackend.flush();
 
   });
+*/
 
 });
