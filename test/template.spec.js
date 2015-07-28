@@ -72,15 +72,12 @@ describe('template', function() {
         templateUrl: "templatetobecached.html"
       }).then(function(modal) {
         expect(modal).not.toBe(null);
+        //  ...so get should have been called.
+        expect($templateCache.get).toHaveBeenCalledWith('templatetobecached.html');
       });
-
-      //  ...so get should have been called.
-      expect($templateCache.get).toHaveBeenCalledWith('templatetobecached.html');
-
     });
 
     $httpBackend.flush();
-
   }));
 
 });

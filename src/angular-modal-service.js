@@ -10,8 +10,8 @@
 
   var module = angular.module('angularModalService', []);
 
-  module.factory('ModalService', ['$document', '$compile', '$controller', '$http', '$rootScope', '$q', '$timeout', '$templateCache',
-    function($document, $compile, $controller, $http, $rootScope, $q, $timeout, $templateCache) {
+  module.factory('ModalService', ['$document', '$compile', '$controller', '$http', '$rootScope', '$q', '$timeout', '$templateCache', '$injector',
+    function($document, $compile, $controller, $http, $rootScope, $q, $timeout, $templateCache, $injector) {
 
     //  Get the body of the document, we'll add the modal to this.
     var body = $document.find('body');
@@ -51,6 +51,26 @@
         return deferred.promise;
       };
 
+      var resolveLocals = function(aLocals) {
+        var deferred = $q.defer();
+        if (!aLocals) {
+          deferred.resolve(null);
+        }
+
+        var locals = angular.extend({}, aLocals);
+        angular.forEach(locals, function(value, key) {
+          locals[key] = angular.isString(value) ? $injector.get(value) : $injector.invoke(value);
+        });
+
+        $q.all(locals).then(function(aResolvedLocals) {
+          deferred.resolve(aResolvedLocals);
+        }, function(error) {
+          deferred.reject(error);
+        });
+
+        return deferred.promise;
+      };
+
       self.showModal = function(options) {
 
         //  Create a deferred we'll resolve when the modal is ready.
@@ -69,82 +89,83 @@
           controllerName = controllerName + " as " + options.controllerAs;
         }
 
-        //  Get the actual html of the template.
-        getTemplate(options.template, options.templateUrl)
-          .then(function(template) {
+        // Try to resolve additional dependancies
+        resolveLocals(options.locals).then(function(locals) {
 
-            //  Create a new scope for the modal.
-            var modalScope = $rootScope.$new();
+          //  Get the actual html of the template.
+          getTemplate(options.template, options.templateUrl)
+            .then(function(template) {
 
-            //  Create the inputs object to the controller - this will include
-            //  the scope, as well as all inputs provided.
-            //  We will also create a deferred that is resolved with a provided
-            //  close function. The controller can then call 'close(result)'.
-            //  The controller can also provide a delay for closing - this is
-            //  helpful if there are closing animations which must finish first.
-            var closeDeferred = $q.defer();
-            var inputs = {
-              $scope: modalScope,
-              close: function(result, delay) {
-                if(delay === undefined || delay === null) delay = 0;
-                $timeout(function () {
-                  closeDeferred.resolve(result);
-                }, delay);
+              //  Create a new scope for the modal.
+              var modalScope = $rootScope.$new();
+
+              //  Create the inputs object to the controller - this will include
+              //  the scope, as well as all inputs provided.
+              //  We will also create a deferred that is resolved with a provided
+              //  close function. The controller can then call 'close(result)'.
+              //  The controller can also provide a delay for closing - this is
+              //  helpful if there are closing animations which must finish first.
+              var closeDeferred = $q.defer();
+              var inputs = {
+                $scope: modalScope,
+                close: function(result, delay) {
+                  if(delay === undefined || delay === null) delay = 0;
+                  $timeout(function () {
+                    closeDeferred.resolve(result);
+                  }, delay);
+                },
+                locals: locals
+              };
+
+              //  If we have provided any inputs, pass them to the controller.
+              inputs = angular.extend(inputs, options.inputs);
+
+              //  Parse the modal HTML into a DOM element (in template form).
+              var modalElementTemplate = angular.element(template);
+
+              //  Compile then link the template element, building the actual element.
+              //  Set the $element on the inputs so that it can be injected if required.
+              var linkFn = $compile(modalElementTemplate);
+
+              //  Create the controller, explicitly specifying the scope to use.
+              var modalController = $controller(controllerName, inputs);
+              
+              var modalElement = linkFn(modalScope);
+              inputs.$element = modalElement;
+
+              //  Finally, append the modal to the dom.
+              if (options.appendElement) {
+                // append to custom append element
+                options.appendElement.append(modalElement);
+              } else {
+                // append to body when no custom append element is specified
+                body.append(modalElement);
               }
-            };
 
-            //  If we have provided any inputs, pass them to the controller.
-            if(options.inputs) {
-              for(var inputName in options.inputs) {
-                inputs[inputName] = options.inputs[inputName];
-              }
-            }
+              //  We now have a modal object.
+              var modal = {
+                controller: modalController,
+                scope: modalScope,
+                element: modalElement,
+                close: closeDeferred.promise
+              };
 
-            //  Parse the modal HTML into a DOM element (in template form).
-            var modalElementTemplate = angular.element(template);
+              //  When close is resolved, we'll clean up the scope and element.
+              modal.close.then(function(result) {
+                //  Clean up the scope
+                modalScope.$destroy();
+                //  Remove the element from the dom.
+                modalElement.remove();
+              });
 
-            //  Compile then link the template element, building the actual element.
-            //  Set the $element on the inputs so that it can be injected if required.
-            var linkFn = $compile(modalElementTemplate);
-
-            //  Create the controller, explicitly specifying the scope to use.
-            var modalController = $controller(controllerName, inputs);
-            
-            var modalElement = linkFn(modalScope);
-            inputs.$element = modalElement;
-
-
-            //  Finally, append the modal to the dom.
-            if (options.appendElement) {
-              // append to custom append element
-              options.appendElement.append(modalElement);
-            } else {
-              // append to body when no custom append element is specified
-              body.append(modalElement);
-            }
-
-            //  We now have a modal object.
-            var modal = {
-              controller: modalController,
-              scope: modalScope,
-              element: modalElement,
-              close: closeDeferred.promise
-            };
-
-            //  When close is resolved, we'll clean up the scope and element.
-            modal.close.then(function(result) {
-              //  Clean up the scope
-              modalScope.$destroy();
-              //  Remove the element from the dom.
-              modalElement.remove();
+              deferred.resolve(modal);
+            })
+            .catch(function(error) {
+              deferred.reject(error);
             });
-
-            deferred.resolve(modal);
-
-          })
-          .catch(function(error) {
-            deferred.reject(error);
-          });
+        }).catch(function(error) {
+          deferred.reject(error);
+        });
 
         return deferred.promise;
       };
